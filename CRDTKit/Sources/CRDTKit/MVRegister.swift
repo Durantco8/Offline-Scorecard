@@ -63,11 +63,12 @@ public struct MVRegister<T: Hashable & Codable>: Equatable, Codable {
 
     /// Returns self if this register has state the querier hasn't seen, nil otherwise.
     ///
-    /// This is full-register granularity, not entry-level. A state-derived entry-level
-    /// delta can't express cross-device removal: when device X's set() replaces device Y's
-    /// entry, Y's VV counter doesn't change, so a partial delta can't signal Y's removal
-    /// without also creating false tombstones for Y's entries in other registers.
-    /// Per-mutation delta accumulation (Stage 2) can solve this if profiling warrants it.
+    /// Full-register granularity. The literature (Almeida et al.) achieves entry-level
+    /// deltas via delta-mutators that record the precise causal context of each mutation
+    /// (the dots observed and consumed). That requires accumulating deltas at write time.
+    /// This implementation derives deltas from final state, which can't recover which
+    /// dots a mutation consumed — so it falls back to sending the full register.
+    /// Acceptable here because each register holds one (player, hole) score entry.
     public func delta(since vv: VersionVector) -> MVRegister<T>? {
         for (device, counter) in versionVector.entries {
             if counter > vv[device] { return self }

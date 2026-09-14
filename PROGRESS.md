@@ -26,16 +26,17 @@ imported.
 ### Decisions made
 
 - **Delta granularity is per-sub-CRDT, not per-entry.** `MVRegister.delta(since:)`
-  and `ORSet.delta(since:)` return their full state or nil — not a filtered
-  subset of entries. The dot-kernel encodes removal as "dot covered by VV,
-  absent from entries," which works in full-state merge but breaks in
-  state-derived partial deltas: when device X's `set()` replaces device Y's
-  entry, Y's VV counter doesn't change, so no partial delta can signal Y's
-  removal without also creating false tombstones for Y's entries in sibling
-  registers. Since each (player, hole) pair has its own register, registers
-  are small and the overhead is negligible. Per-mutation delta accumulation
-  (tracking deltas at write time rather than deriving them from state) can
-  solve this if profiling warrants it.
+  and `ORSet.delta(since:)` return their full state or nil. Entry-level deltas
+  are well-defined in the literature (Almeida, Shoker, Baquero) using
+  delta-mutators that record the precise causal context of each mutation — the
+  specific dots observed and consumed, not the full version vector. This
+  implementation derives deltas from final state instead, which can't recover
+  which dots a mutation consumed: sending full VV + partial entries causes
+  false removals; sending partial VV + partial entries can't signal cross-device
+  removal. Per-mutation delta accumulation is the correct path to entry-level
+  granularity, but since each register holds one (player, hole) score entry
+  and the players set is typically 1–8 entries, full-state deltas are
+  effectively free at this scale.
 - **Dot allocation is global across a RoundState.** All sub-CRDTs draw dots
   from a shared counter per device. Sub-CRDT version vectors may "over-claim"
   (cover dots belonging to sibling sub-CRDTs) but this is harmless — entries
