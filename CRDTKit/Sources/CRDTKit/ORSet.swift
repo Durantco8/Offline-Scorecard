@@ -65,12 +65,13 @@ public struct ORSet<T: Hashable & Codable>: Equatable, Codable {
         return result
     }
 
+    /// Returns self if this set has state the querier hasn't seen, nil otherwise.
+    ///
+    /// Full-register granularity for the same reason as MVRegister: a state-derived
+    /// entry-level delta can't express cross-device removal. See MVRegister.delta docs.
     public func delta(since vv: VersionVector) -> ORSet<T>? {
         for (device, counter) in versionVector.entries {
             if counter > vv[device] { return self }
-        }
-        for entry in entries {
-            if vv[entry.dot.device] < entry.dot.counter { return self }
         }
         return nil
     }

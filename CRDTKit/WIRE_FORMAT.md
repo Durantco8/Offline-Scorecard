@@ -137,6 +137,7 @@ CBOR map with integer keys:
 | 2 | ORSet\<PlayerID\> \| null | Players delta |
 | 3 | map { PlayerID → LWWRegister\<String\> } | Changed player names |
 | 4 | map { PlayerID → map { unsigned → MVRegister\<HoleEntry\> } } | Changed score entries |
+| 5 | unsigned | Schema version (currently 1) |
 
 Keys 3 and 4 use PlayerID (16-byte UUID) as map keys. Key 4's inner map uses
 unsigned hole numbers (1–18) as keys.

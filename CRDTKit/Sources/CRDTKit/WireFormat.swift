@@ -317,12 +317,18 @@ extension RoundDelta: WireCodable {
             (1, courseValue),
             (2, playersValue),
             (3, .map(namesPairs)),
-            (4, .map(entriesPairs))
+            (4, .map(entriesPairs)),
+            (5, .unsigned(1))
         )
     }
 
     public static func fromCBOR(_ cbor: CBORValue) throws -> RoundDelta {
         let m = try readCBORMap(cbor)
+
+        let version = try requireUnsigned(try requireKey(m, 5))
+        guard version == 1 else {
+            throw CBORError.typeMismatch(expected: "version 1", got: .unsigned(version))
+        }
 
         let roundID = try uuidFromCBOR(try requireKey(m, 0))
 

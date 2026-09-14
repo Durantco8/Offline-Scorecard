@@ -26,11 +26,16 @@ imported.
 ### Decisions made
 
 - **Delta granularity is per-sub-CRDT, not per-entry.** `MVRegister.delta(since:)`
-  and `ORSet.delta(since:)` return their full state or nil. Computing
-  entry-level deltas from final state alone can't correctly propagate removals
-  when the removed entry's device counter hasn't advanced. Since each (player,
-  hole) pair has its own register, the overhead is negligible. Per-mutation
-  delta accumulation can be added in Stage 2 if profiling warrants it.
+  and `ORSet.delta(since:)` return their full state or nil — not a filtered
+  subset of entries. The dot-kernel encodes removal as "dot covered by VV,
+  absent from entries," which works in full-state merge but breaks in
+  state-derived partial deltas: when device X's `set()` replaces device Y's
+  entry, Y's VV counter doesn't change, so no partial delta can signal Y's
+  removal without also creating false tombstones for Y's entries in sibling
+  registers. Since each (player, hole) pair has its own register, registers
+  are small and the overhead is negligible. Per-mutation delta accumulation
+  (tracking deltas at write time rather than deriving them from state) can
+  solve this if profiling warrants it.
 - **Dot allocation is global across a RoundState.** All sub-CRDTs draw dots
   from a shared counter per device. Sub-CRDT version vectors may "over-claim"
   (cover dots belonging to sibling sub-CRDTs) but this is harmless — entries
@@ -48,10 +53,13 @@ imported.
 
 ### Test coverage
 
-40 tests covering:
-- Idempotent, commutative, associative merge for every CRDT type and RoundState
+33 tests covering:
+- Randomized algebraic law tests (idempotent, commutative, associative merge)
+  for VersionVector, LWWRegister, MVRegister, ORSet, and RoundState — 50–100
+  seeds each, seeded RNG for reproducibility
+- Hand-written behavioral tests for HLC ordering/tick/receive, LWW
+  timestamp-wins, MV conflict retention/overwrite/resolution, ORSet
+  add-wins/remove-propagation, VV dominance
 - Delta round-trip equivalence (applying delta == merging full state)
-- MVRegister conflict retention and resolution
-- ORSet add-wins semantics and remove propagation
-- CBOR wire format round-trips for all types
+- CBOR wire format round-trips for all types including version field
 - No networking imports in the library target

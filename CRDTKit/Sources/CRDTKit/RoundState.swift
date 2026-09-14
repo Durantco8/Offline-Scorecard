@@ -163,15 +163,23 @@ public struct RoundState: Equatable, Codable {
             }
         }
 
-        // Update VV from merged sub-CRDTs
-        versionVector.merge(course.dot.device == course.dot.device ? VersionVector([course.dot.device: course.dot.counter]) : VersionVector())
-        versionVector.merge(players.versionVector)
-        for (_, reg) in playerNames {
-            versionVector.merge(VersionVector([reg.dot.device: reg.dot.counter]))
+        // Update global VV from changed sub-CRDTs only
+        if delta.course != nil {
+            versionVector.merge(VersionVector([course.dot.device: course.dot.counter]))
         }
-        for (_, holes) in entries {
-            for (_, reg) in holes {
-                versionVector.merge(reg.versionVector)
+        if delta.players != nil {
+            versionVector.merge(players.versionVector)
+        }
+        for (pid, _) in delta.playerNames {
+            if let reg = playerNames[pid] {
+                versionVector.merge(VersionVector([reg.dot.device: reg.dot.counter]))
+            }
+        }
+        for (pid, holes) in delta.entries {
+            for (hole, _) in holes {
+                if let reg = entries[pid]?[hole] {
+                    versionVector.merge(reg.versionVector)
+                }
             }
         }
     }

@@ -61,12 +61,16 @@ public struct MVRegister<T: Hashable & Codable>: Equatable, Codable {
         return result
     }
 
+    /// Returns self if this register has state the querier hasn't seen, nil otherwise.
+    ///
+    /// This is full-register granularity, not entry-level. A state-derived entry-level
+    /// delta can't express cross-device removal: when device X's set() replaces device Y's
+    /// entry, Y's VV counter doesn't change, so a partial delta can't signal Y's removal
+    /// without also creating false tombstones for Y's entries in other registers.
+    /// Per-mutation delta accumulation (Stage 2) can solve this if profiling warrants it.
     public func delta(since vv: VersionVector) -> MVRegister<T>? {
         for (device, counter) in versionVector.entries {
             if counter > vv[device] { return self }
-        }
-        for entry in entries {
-            if vv[entry.dot.device] < entry.dot.counter { return self }
         }
         return nil
     }
