@@ -158,7 +158,12 @@ final class SimReplica {
 
     func crash(keepState: Bool) {
         peerVVs = [:]
-        if !keepState {
+        if keepState {
+            // Round-trip through JSON to prove serialization preserves CRDT state.
+            // Models: app persists state to disk, process killed, app relaunches and loads.
+            let data = try! JSONEncoder().encode(state)
+            state = try! JSONDecoder().decode(RoundState.self, from: data)
+        } else {
             // Remember highest counter before wiping so we don't reuse dots.
             // Models persisting the counter separately from CRDT state.
             // max() handles double-crash: state VV resets but counter must not go down.

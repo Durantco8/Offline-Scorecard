@@ -108,9 +108,46 @@ adversarial network conditions. No production code changes.
 - Stale messages in queue during quiescence could prevent convergence. Fixed
   by clearing queue at quiesce start
 
+## Stage 3 — Persistence ✅
+
+**Shipped:** Durable local store with atomic writes. State survives process
+kill and device restart. Serialization round-trip verified across 1000+
+simulation seeds.
+
+### What was built
+
+- `RoundStore` protocol — `save`, `load`, `list`, `delete` for round state
+- `FileRoundStore` — JSON-encoded files, one per round. Writes to a temp
+  file then renames for atomicity (no corrupted state on mid-write kill)
+- Simulation integration: `crash(keepState: true)` now round-trips state
+  through `JSONEncoder`/`JSONDecoder`, proving serialization preserves
+  enough CRDT state for convergence across all 1000+ seeded schedules
+- 7 unit tests for FileRoundStore (save/load/list/delete/overwrite/atomic)
+
+### Decisions made
+
+- **File-based with JSONEncoder, not SQLite or Core Data.** RoundState is a
+  single struct serialized as a unit — no relational queries, no field-level
+  updates, no joins. State is under 50 KB per round (4 players × 18 holes).
+  Core Data's managed object graph and SQLite's query surface are unused
+  overhead for what is functionally `save(blob, key)` / `load(key)`
+- **Atomic writes via temp-file-then-rename.** A JSON write isn't atomic —
+  process kill mid-write produces a corrupted file. Writing to `.tmp` then
+  using `replaceItemAt` ensures the file is always the old or new state,
+  never partial
+
+### What is open
+
+- **Full-state write on every mutation is a known scaling limit.** At ~50 KB
+  per round, rewriting the entire file on every score entry and received
+  delta is fast for v1. If rounds grow (per-shot logging, many players) or
+  save frequency increases, incremental persistence (WAL or delta journal)
+  would be needed. Acceptable now, flagged for later
+- DeviceID persistence (app layer concern, deferred to Stage 5)
+
 ### Test coverage
 
-37 tests covering:
+44 tests covering:
 - Randomized algebraic law tests (idempotent, commutative, associative merge)
   for VersionVector, LWWRegister, MVRegister, ORSet, and RoundState — 50–100
   seeds each, seeded RNG for reproducibility
@@ -127,3 +164,7 @@ adversarial network conditions. No production code changes.
   propagation (A↔B, B↔C, no A↔C), idempotent delta application, no lost
   writes, concurrent conflicts retained. Validated by confirming failures
   when applyDelta VV update is removed and when MVRegister.merge is broken.
+- FileRoundStore: save/load round-trip, list, delete, overwrite, atomic
+  write (no .tmp residue), nonexistent-key handling
+- Simulation crash-with-state exercises JSONEncoder/JSONDecoder round-trip
+  on every keepState crash across all 1000+ seeds
