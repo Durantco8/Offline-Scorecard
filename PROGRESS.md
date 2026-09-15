@@ -225,8 +225,14 @@ It should be the first thing run once there is an app to install.
   MCPeerID display names are truncated and not guaranteed unique.
   Discovery info is only available during browsing, not after session
   establishment. A post-connect handshake is reliable and simple
-- **Auto-accept invitations.** No pairing UI for v1. Security boundary is
-  physical proximity (BLE range ~10m). Acceptable for a golf scorecard
+- **Auto-accept invitations, no peer limit.** Every nearby device running
+  the same service type is invited and accepted unconditionally — no
+  session cap, no round-scoping, no group membership check. Acceptable
+  for a friend-group demo where physical proximity (BLE range ~10m) is
+  the only boundary. If the app is ever used at a tournament or driving
+  range where multiple groups are nearby, this needs scoping — likely
+  round ID in the Bonjour discovery info so browsers only invite peers
+  advertising the same round
 - **`RoundDelta.isEmpty` promoted to public property.** Was previously a
   test-only extension. SyncEngine needs it to skip no-op delta sends
 
