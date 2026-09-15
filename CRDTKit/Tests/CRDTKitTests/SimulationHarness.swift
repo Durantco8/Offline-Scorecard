@@ -214,10 +214,4 @@ final class WriteLog {
     }
 }
 
-// MARK: - RoundDelta convenience
-
-extension RoundDelta {
-    var isEmpty: Bool {
-        course == nil && players == nil && playerNames.isEmpty && entries.isEmpty
-    }
-}
+// MARK: - RoundDelta convenience (isEmpty is now on RoundDelta itself)

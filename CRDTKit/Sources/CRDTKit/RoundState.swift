@@ -212,4 +212,8 @@ public struct RoundDelta: Equatable, Codable {
         self.playerNames = playerNames
         self.entries = entries
     }
+
+    public var isEmpty: Bool {
+        course == nil && players == nil && playerNames.isEmpty && entries.isEmpty
+    }
 }

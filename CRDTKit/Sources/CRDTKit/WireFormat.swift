@@ -7,11 +7,11 @@ public protocol WireCodable {
 
 // MARK: - Helpers
 
-func cborMap(_ pairs: (UInt64, CBORValue)...) -> CBORValue {
+public func cborMap(_ pairs: (UInt64, CBORValue)...) -> CBORValue {
     .map(pairs.map { (.unsigned($0.0), $0.1) })
 }
 
-func readCBORMap(_ cbor: CBORValue) throws -> [UInt64: CBORValue] {
+public func readCBORMap(_ cbor: CBORValue) throws -> [UInt64: CBORValue] {
     guard case .map(let pairs) = cbor else {
         throw CBORError.typeMismatch(expected: "map", got: cbor)
     }
@@ -25,40 +25,40 @@ func readCBORMap(_ cbor: CBORValue) throws -> [UInt64: CBORValue] {
     return result
 }
 
-func requireKey(_ m: [UInt64: CBORValue], _ key: UInt64) throws -> CBORValue {
+public func requireKey(_ m: [UInt64: CBORValue], _ key: UInt64) throws -> CBORValue {
     guard let v = m[key] else { throw CBORError.missingKey(key) }
     return v
 }
 
-func requireUnsigned(_ v: CBORValue) throws -> UInt64 {
+public func requireUnsigned(_ v: CBORValue) throws -> UInt64 {
     guard case .unsigned(let n) = v else {
         throw CBORError.typeMismatch(expected: "unsigned", got: v)
     }
     return n
 }
 
-func requireBytes(_ v: CBORValue) throws -> Data {
+public func requireBytes(_ v: CBORValue) throws -> Data {
     guard case .bytes(let d) = v else {
         throw CBORError.typeMismatch(expected: "bytes", got: v)
     }
     return d
 }
 
-func requireText(_ v: CBORValue) throws -> String {
+public func requireText(_ v: CBORValue) throws -> String {
     guard case .text(let s) = v else {
         throw CBORError.typeMismatch(expected: "text", got: v)
     }
     return s
 }
 
-func requireArray(_ v: CBORValue) throws -> [CBORValue] {
+public func requireArray(_ v: CBORValue) throws -> [CBORValue] {
     guard case .array(let a) = v else {
         throw CBORError.typeMismatch(expected: "array", got: v)
     }
     return a
 }
 
-func requireFloat64(_ v: CBORValue) throws -> Double {
+public func requireFloat64(_ v: CBORValue) throws -> Double {
     guard case .float64(let d) = v else {
         throw CBORError.typeMismatch(expected: "float64", got: v)
     }
@@ -67,7 +67,7 @@ func requireFloat64(_ v: CBORValue) throws -> Double {
 
 // MARK: - UUID
 
-func uuidToCBOR(_ uuid: UUID) -> CBORValue {
+public func uuidToCBOR(_ uuid: UUID) -> CBORValue {
     var bytes = [UInt8](repeating: 0, count: 16)
     let u = uuid.uuid
     bytes[0] = u.0; bytes[1] = u.1; bytes[2] = u.2; bytes[3] = u.3
@@ -77,7 +77,7 @@ func uuidToCBOR(_ uuid: UUID) -> CBORValue {
     return .bytes(Data(bytes))
 }
 
-func uuidFromCBOR(_ cbor: CBORValue) throws -> UUID {
+public func uuidFromCBOR(_ cbor: CBORValue) throws -> UUID {
     let data = try requireBytes(cbor)
     guard data.count == 16 else {
         throw CBORError.typeMismatch(expected: "16-byte UUID", got: cbor)

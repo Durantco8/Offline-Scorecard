@@ -168,3 +168,101 @@ simulation seeds.
   write (no .tmp residue), nonexistent-key handling
 - Simulation crash-with-state exercises JSONEncoder/JSONDecoder round-trip
   on every keepState crash across all 1000+ seeds
+
+## Stage 4 — Real transport ⚠️ (exit criteria pending real hardware)
+
+**Shipped:** MultipeerConnectivity transport behind the existing `Transport`
+protocol, with anti-entropy gossip and peer lifecycle management. Nothing
+above the protocol changed.
+
+**Exit criteria status:** The PLAN.md exit bar is four physical devices in
+airplane mode, separated into partitions, rejoined, converging on identical
+state. This cannot be tested from CLI or simulators — MultipeerConnectivity
+requires real Bluetooth/WiFi hardware (no Bonjour in the simulator). The
+gossip protocol is proven correct via unit tests against a fake transport,
+and the underlying CRDT merge is validated by 1000+ seeded simulation
+schedules, but the real-device convergence test is blocked on Stage 5 UI.
+It should be the first thing run once there is an app to install.
+
+### What was built
+
+- `CRDTTransport` library target depending on `CRDTKit`
+- `SyncMessage` — two message types for gossip protocol:
+  - `.vvDigest(roundID, vv)` — "here's what I have"
+  - `.delta(RoundDelta)` — "here's what you're missing"
+  - CBOR-encoded using the existing wire format
+- `SyncEngine` — anti-entropy gossip protocol:
+  - Periodic or on-demand VV digest exchange with all connected peers
+  - On receiving a digest: compare against local state, send delta if local
+    is ahead, reply with own digest if peer might have state we lack
+  - On receiving a delta: merge into local state, notify delegate
+  - Per-peer VV tracking to avoid redundant delta sends
+  - Peer status tracking: `lastSeen`, `lastSynced` timestamps
+  - Round management: add/update/remove rounds
+  - Delegate protocol for app-layer persistence on state change
+- `MCTransport` — MultipeerConnectivity implementation:
+  - Simultaneous advertise + browse for automatic peer discovery
+  - Auto-accept all invitations (no auth for v1)
+  - DeviceID handshake on connect: 2-byte prefix + 16-byte UUID, sent
+    immediately on session connect. Messages received before handshake
+    completes are queued and drained once mapping is established
+  - MCPeerID ↔ DeviceID bidirectional mapping
+  - `onPeerChange` callback for connect/disconnect events
+  - `start()`/`stop()` lifecycle
+- 11 unit tests for SyncEngine and SyncMessage with fake transport
+
+### Decisions made
+
+- **Gossip is digest-then-delta, not broadcast.** Each sync round starts
+  with a lightweight VV digest (tens of bytes). Deltas are sent only when
+  the digest reveals the peer is behind. This avoids broadcasting full
+  deltas every cycle, which matters over BLE where bandwidth is ~2 KB/s
+- **Per-peer VV tracking uses optimistic update.** After sending a delta,
+  the sender records the peer's VV as up-to-date. If the message is lost,
+  the next digest exchange will detect the gap and resend. Same tradeoff
+  as the simulation harness
+- **Handshake is a custom 18-byte message, not Bonjour discovery info.**
+  MCPeerID display names are truncated and not guaranteed unique.
+  Discovery info is only available during browsing, not after session
+  establishment. A post-connect handshake is reliable and simple
+- **Auto-accept invitations.** No pairing UI for v1. Security boundary is
+  physical proximity (BLE range ~10m). Acceptable for a golf scorecard
+- **`RoundDelta.isEmpty` promoted to public property.** Was previously a
+  test-only extension. SyncEngine needs it to skip no-op delta sends
+
+### SimNetwork vs MultipeerConnectivity gaps
+
+| Concern | SimNetwork | Real MPC |
+|---|---|---|
+| Session negotiation | Instant | 1–3s latency; can fail silently |
+| Message size | Unlimited | ~96 KB per `send()` (undocumented) |
+| Discovery | Instant, deterministic | Flaky; peers appear/disappear |
+| Background | Always running | Suspended by iOS; sessions drop |
+| Peer identity | Stable DeviceID | MCPeerID changes across sessions |
+| Message ordering | Queue order (randomized) | Reliable mode preserves order |
+| Duplex | Symmetric | Both sides must advertise+browse |
+
+### What is open
+
+- **Message size limit (~96 KB) is not enforced.** RoundDelta for a
+  typical round is well under this (~50 KB max), but if rounds grow
+  (many players, per-shot data), large deltas may need chunking
+- **Background suspension drops MPC sessions.** iOS suspends the app
+  after ~30s in background; MCSession disconnects. Reconnect-on-foreground
+  is needed for Stage 5 UI integration
+- **No encryption.** `encryptionPreference: .none` for v1. Physical
+  proximity is the security boundary. If the app moves to WiFi-range
+  sync, encryption should be added
+- DeviceID persistence (app layer concern, deferred to Stage 5)
+- Physical device testing deferred to Stage 5 UI integration — gossip
+  protocol is proven correct via unit tests with fake transport and
+  the Stage 2 simulation harness validates the underlying CRDT merge
+
+### Test coverage
+
+55 tests covering:
+- All Stage 1–3 tests (unchanged, still passing)
+- SyncMessage CBOR round-trip: vvDigest, delta, empty VV, invalid data
+- SyncEngine gossip: digest-triggers-delta, bidirectional sync,
+  transitive propagation (A↔B↔C), duplicate delta idempotency,
+  no-delta-when-up-to-date, peer add/remove, round add/remove
