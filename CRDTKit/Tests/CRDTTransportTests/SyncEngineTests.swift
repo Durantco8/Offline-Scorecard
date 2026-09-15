@@ -207,12 +207,20 @@ final class SyncEngineTests: XCTestCase {
         engineB.addPeer(deviceC)
         engineC.addPeer(deviceB)
 
-        // Sync rounds until convergence
+        // Sync rounds until convergence — each iteration: deliver pending,
+        // then trigger a new digest round so updated state propagates.
         for _ in 0..<5 {
             transportA.deliverTo(transports)
             transportB.deliverTo(transports)
             transportC.deliverTo(transports)
+            engineA.syncAll()
+            engineB.syncAll()
+            engineC.syncAll()
         }
+        // Final delivery
+        transportA.deliverTo(transports)
+        transportB.deliverTo(transports)
+        transportC.deliverTo(transports)
 
         // C should have A's write via B
         let cState = engineC.round(for: roundID)!

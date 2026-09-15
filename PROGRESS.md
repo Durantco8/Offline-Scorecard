@@ -272,3 +272,68 @@ It should be the first thing run once there is an app to install.
 - SyncEngine gossip: digest-triggers-delta, bidirectional sync,
   transitive propagation (A↔B↔C), duplicate delta idempotency,
   no-delta-when-up-to-date, peer add/remove, round add/remove
+
+## Stage 5 — UI ⚠️ (builds, needs real-device test)
+
+**Shipped:** Minimal SwiftUI app with all screens. Builds for iOS device
+(iphoneos SDK). Not yet tested on real hardware — Stage 4 exit criteria
+(partition/rejoin/converge on physical devices) still pending.
+
+### What was built
+
+- `ScoreCard/` Xcode project with local package dependency on `CRDTKit/`
+- `AppState` — `@MainActor ObservableObject` coordinating:
+  - `SyncEngine` + `MCTransport` for peer discovery and gossip
+  - `FileRoundStore` for persistence
+  - `DeviceID` persisted to UserDefaults on first launch
+  - Round lifecycle (create, add player, set score, resolve conflict)
+  - Delegate bridge: remote merges → `@Published` state + persist
+- `RoundListView` — create round, see nearby devices, navigate to round
+- `CourseSetupView` — 9/18 holes, par per hole (3–5), stroke index,
+  add players by name
+- `ScorecardView` — players × holes grid with:
+  - Tap-to-edit score entry (any player, any hole)
+  - Running totals and par-relative scoring (E/+N/-N, color-coded)
+  - Conflict indicator (orange "!" badge) linking to resolve view
+- `PeerStatusView` — this device ID, connected peers with last-seen
+  and last-synced timestamps, round count
+- `ConflictView` — shows both concurrent values, tap to resolve
+  (writes a new dominating entry)
+- `RoundHistoryView` — completed rounds (all players scored all holes)
+- Info.plist with `NSLocalNetworkUsageDescription`, `NSBonjourServices`,
+  `UILaunchScreen`, orientation support
+
+### Decisions made
+
+- **DeviceID persisted to UserDefaults, not Keychain.** Simpler for v1.
+  Keychain would survive app reinstall but adds complexity for no benefit
+  at this stage — a reinstall means a new replica anyway
+- **`HLC.now(device:)` uses millisecond wall clock.** Consistent with
+  the rest of the CRDT layer's HLC usage
+- **SyncDelegate stored as strong property on AppState.** SyncEngine's
+  delegate is weak; a temporary would be immediately deallocated
+- **Course setup inline, not a separate flow.** Sheet on round creation,
+  also accessible from the scorecard toolbar. No separate "new round
+  wizard" — keep it minimal
+- **Conflict resolution is a new write that dominates.** Tapping a value
+  in ConflictView writes that value as a new entry, which dominates
+  both concurrent values on merge. This matches the CRDT semantics
+  (new write with later HLC supersedes)
+
+### What is open
+
+- **Stage 4 real-device exit criteria still pending.** App builds for
+  device but hasn't been installed or tested on real hardware yet.
+  First priority is: install on two phones, create a round on one,
+  verify it syncs to the other, then run the full partition/rejoin test
+- **No round sharing by proximity.** Currently each device creates its
+  own round. For join-by-proximity, the app needs a way to discover
+  and subscribe to a round that another device already has. The sync
+  engine will propagate any round both devices know about, but the
+  "I want to join your round" intent isn't expressed yet
+- **Stroke index editing is display-only.** SI values are shown but not
+  editable in the UI — they're set to 1–18 sequentially. Fine for v1
+- **No undo.** A mis-entered score can be overwritten but not undone
+- **Timer-based periodic sync at 2s.** Acceptable for v1 but should
+  move to event-driven (sync on mutation + on peer connect) to reduce
+  unnecessary network traffic
