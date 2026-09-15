@@ -50,6 +50,13 @@ imported.
 - MultipeerConnectivity transport (Stage 4)
 - Whether per-mutation delta accumulation is worth adding for bandwidth
   optimization over the mesh
+- **Global VV is not reconstructable from received deltas.** When an
+  LWW-losing init dot is discarded by merge, no sub-CRDT carries it, so
+  peers can never reconstruct the originator's full VV via applyDelta.
+  Safe for local dot allocation (always uses locally-allocated counters)
+  but must not be compared across replicas or used as a causal summary.
+  Stage 4 gossip design should account for this if it needs a real
+  per-replica causal summary
 
 ## Stage 2 — Simulation harness ✅
 
