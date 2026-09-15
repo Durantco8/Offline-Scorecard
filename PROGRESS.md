@@ -46,15 +46,64 @@ imported.
 
 ### What is open
 
-- Transport implementations (in-memory fake for Stage 2, MultipeerConnectivity
-  for Stage 4)
 - Persistence (Stage 3)
+- MultipeerConnectivity transport (Stage 4)
 - Whether per-mutation delta accumulation is worth adding for bandwidth
   optimization over the mesh
 
+## Stage 2 — Simulation harness ✅
+
+**Shipped:** Deterministic simulation harness exercising the CRDT core under
+adversarial network conditions. No production code changes.
+
+### What was built
+
+- `SimNetwork` — in-memory network with connectivity graph, message queue,
+  configurable drop/duplicate rates, partition/heal operations
+- `SimTransport` — `Transport` protocol implementation backed by SimNetwork
+- `SimReplica` — wraps `RoundState` + `HLC` + per-peer VV tracking with
+  sync/crash/write methods. Crash models state loss with persisted counter
+  guard to prevent dot reuse on recovery
+- `WriteLog` / `WriteRecord` — tracks writes with causal metadata for
+  property verification against converged state
+- 4 test functions, 1000+ seeded schedules:
+  - `testRandomizedSchedules` (700 seeds): random events including writes,
+    syncs, partitions, heals, crashes, fault injection. Checks convergence,
+    no-lost-writes, conflict retention, idempotency
+  - `testTransitivePropagation` (100 seeds): A↔B, B↔C topology
+  - `testCrashRecovery` (100 seeds): crash with/without state, verify
+    convergence after recovery
+  - `testConcurrentConflicts` (100 seeds): isolated replicas write same key,
+    verify all values survive
+
+### Decisions made
+
+- **Crash-without-state models persisted counter.** A crashed replica tracks
+  its pre-crash counter (max across multiple crashes) and blocks writes until
+  VV recovery reaches that level, preventing dot reuse
+- **peerVV tracking is optimistic.** The sender updates peerVVs after
+  enqueuing, not on delivery confirmation. This matches real UDP-like
+  transport but means dropped messages cause unnecessary retransmission in
+  subsequent syncs rather than data loss
+- **removeLostWrites uses converged state, not global VVs.** Global VVs can
+  cover a dot from a different sub-CRDT, falsely preserving a write record
+  for a truly lost entry. Checking the actual register state after quiescence
+  is precise
+- **Global VV intentionally excluded from convergence check.** applyDelta
+  reconstructs VV from sub-CRDT dots/VVs only; init dots from losing LWW
+  courses are not propagated. This is cosmetic — delta computation uses
+  sub-CRDT VVs
+
+### Bugs found and fixed (in the harness)
+
+- Double-crash preCrashCounter regression: second crash overwrote guard with
+  stale VV from fresh init. Fixed with max()
+- Stale messages in queue during quiescence could prevent convergence. Fixed
+  by clearing queue at quiesce start
+
 ### Test coverage
 
-33 tests covering:
+37 tests covering:
 - Randomized algebraic law tests (idempotent, commutative, associative merge)
   for VersionVector, LWWRegister, MVRegister, ORSet, and RoundState — 50–100
   seeds each, seeded RNG for reproducibility
@@ -64,3 +113,10 @@ imported.
 - Delta round-trip equivalence (applying delta == merging full state)
 - CBOR wire format round-trips for all types including version field
 - No networking imports in the library target
+- Simulation harness (Stage 2): 4 replicas over in-memory transport with
+  seeded schedules (1000+ seeds). Simulates partitions, message
+  drop/reorder/duplication, crash with and without state loss, concurrent
+  writes. Properties verified: convergence after quiescence, transitive
+  propagation (A↔B, B↔C, no A↔C), idempotent delta application, no lost
+  writes, concurrent conflicts retained. Validated by confirming failures
+  when applyDelta VV update is removed and when MVRegister.merge is broken.
