@@ -263,4 +263,73 @@ final class SyncEngineTests: XCTestCase {
         let afterSecond = engineB.round(for: roundID)!
         XCTAssertEqual(afterFirst, afterSecond)
     }
+
+    // MARK: - Bootstrap unknown rounds
+
+    func testBootstrapUnknownRound() {
+        let (engineA, transportA, deviceA) = makeEngine()
+        let (engineB, transportB, deviceB) = makeEngine()
+        let transports: [DeviceID: FakeTransport] = [deviceA: transportA, deviceB: transportB]
+
+        let roundID = UUID()
+        var stateA = makeRound(id: roundID, device: deviceA)
+        let player = PlayerID(UUID())
+        stateA.addPlayer(player, device: deviceA)
+        stateA.setScore(player: player, hole: 1,
+                        entry: HoleEntry(strokes: 5), device: deviceA)
+        engineA.addRound(stateA)
+        // B has NO round — it doesn't know about roundID at all
+
+        let delegateB = SyncDelegateSpy()
+        engineB.delegate = delegateB
+
+        engineA.addPeer(deviceB)
+        engineB.addPeer(deviceA)
+
+        // Exchange messages until convergence
+        for _ in 0..<5 {
+            transportA.deliverTo(transports)
+            transportB.deliverTo(transports)
+        }
+
+        // B should have bootstrapped the round and received full state
+        let bState = engineB.round(for: roundID)
+        XCTAssertNotNil(bState, "B should have the round after bootstrap")
+        XCTAssertTrue(bState!.players.elements.contains(player))
+        XCTAssertEqual(bState!.entries[player]?[1]?.values, [HoleEntry(strokes: 5)])
+
+        // Delegate should have been notified (persistence path)
+        XCTAssertTrue(delegateB.updatedRounds.contains(roundID))
+    }
+
+    func testBootstrapDoesNotDuplicateExistingRound() {
+        let (engineA, transportA, deviceA) = makeEngine()
+        let (engineB, transportB, deviceB) = makeEngine()
+        let transports: [DeviceID: FakeTransport] = [deviceA: transportA, deviceB: transportB]
+
+        let roundID = UUID()
+        var stateA = makeRound(id: roundID, device: deviceA)
+        let player = PlayerID(UUID())
+        stateA.addPlayer(player, device: deviceA)
+        engineA.addRound(stateA)
+
+        // B already has this round with its own state
+        var stateB = makeRound(id: roundID, device: deviceB)
+        let p2 = PlayerID(UUID())
+        stateB.addPlayer(p2, device: deviceB)
+        engineB.addRound(stateB)
+
+        engineA.addPeer(deviceB)
+        engineB.addPeer(deviceA)
+
+        for _ in 0..<5 {
+            transportA.deliverTo(transports)
+            transportB.deliverTo(transports)
+        }
+
+        // Both rounds should have merged — both players present
+        let finalB = engineB.round(for: roundID)!
+        XCTAssertTrue(finalB.players.elements.contains(player))
+        XCTAssertTrue(finalB.players.elements.contains(p2))
+    }
 }

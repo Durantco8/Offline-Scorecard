@@ -133,7 +133,16 @@ public final class SyncEngine {
     }
 
     private func handleDigest(roundID: UUID, remoteVV: VersionVector, from peerID: DeviceID) {
-        guard let state = rounds[roundID] else { return }
+        // Bootstrap: if we don't know this round, create a fresh empty state.
+        // The init dot uses wall=0 so the bootstrap course loses LWW to any
+        // real course from the originator. The subsequent delta will overwrite.
+        if rounds[roundID] == nil {
+            let clock = HLC(wall: 0, counter: 0, device: deviceID)
+            let state = RoundState(id: roundID, device: deviceID, timestamp: clock)
+            rounds[roundID] = state
+        }
+
+        let state = rounds[roundID]!
 
         // If we have state the peer hasn't seen, send a delta
         let peerVV = peerVVs[peerID]?[roundID] ?? remoteVV
@@ -158,8 +167,11 @@ public final class SyncEngine {
         state.applyDelta(delta)
         rounds[delta.roundID] = state
 
-        // Update peer VV tracking — peer has at least this state
-        peerVVs[peerID, default: [:]][delta.roundID] = state.versionVector
+        // Don't update peerVVs here — receiving a delta tells us what
+        // the peer *sent*, not what they *have*. peerVVs tracks what
+        // we've sent to them (updated in handleDigest when we send a
+        // delta). Updating here to the merged VV would falsely tell us
+        // the peer already has our local state.
 
         // Track sync time
         peers[peerID]?.lastSynced = Date()

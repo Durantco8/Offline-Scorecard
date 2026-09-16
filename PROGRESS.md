@@ -233,6 +233,14 @@ It should be the first thing run once there is an app to install.
   range where multiple groups are nearby, this needs scoping — likely
   round ID in the Bonjour discovery info so browsers only invite peers
   advertising the same round
+- **Auto-join unknown rounds from nearby peers.** When SyncEngine receives
+  a VV digest for a round it doesn't know, it creates a fresh empty
+  RoundState and lets the normal delta path populate it. Combined with
+  auto-accept, this means a device silently pulls in every round from
+  every peer in Bluetooth range — no invitation, no confirmation. This
+  is the same open scoping issue as auto-accept, surfacing from the
+  gossip layer instead of the transport layer. The fix is the same:
+  round-scoped discovery so devices only sync rounds they've opted into
 - **`RoundDelta.isEmpty` promoted to public property.** Was previously a
   test-only extension. SyncEngine needs it to skip no-op delta sends
 
