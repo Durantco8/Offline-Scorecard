@@ -53,6 +53,9 @@ struct ScorecardView: View {
             TextField("Strokes", text: $editText)
                 .keyboardType(.numberPad)
             Button("Save") { saveEdit() }
+            if let cell = editingCell, state?.entries[cell.player]?[cell.hole] != nil {
+                Button("Clear", role: .destructive) { clearScore() }
+            }
             Button("Cancel", role: .cancel) { editingCell = nil }
         }
         .sheet(item: $showingConflict) { conflict in
@@ -158,7 +161,7 @@ struct ScorecardView: View {
                         .frame(width: 30, height: 30)
                         .background(.orange, in: RoundedRectangle(cornerRadius: 4))
                 }
-            } else if let entry = register?.values.first {
+            } else if let entry = register?.values.first, entry.strokes > 0 {
                 Button {
                     editingCell = CellID(player: player, hole: hole.number)
                     editText = "\(entry.strokes)"
@@ -218,7 +221,8 @@ struct ScorecardView: View {
     private func totalStrokes(player: PlayerID) -> Int {
         guard let entries = state?.entries[player] else { return 0 }
         return entries.values.compactMap { reg in
-            reg.values.count == 1 ? reg.values.first?.strokes : nil
+            guard reg.values.count == 1, let s = reg.values.first?.strokes, s > 0 else { return nil }
+            return s
         }.reduce(0, +)
     }
 
@@ -226,7 +230,9 @@ struct ScorecardView: View {
         guard let entries = state?.entries[player] else { return [] }
         var result: Set<Int> = []
         for (hole, reg) in entries {
-            if reg.values.count == 1 { result.insert(hole) }
+            if reg.values.count == 1, let s = reg.values.first?.strokes, s > 0 {
+                result.insert(hole)
+            }
         }
         return result
     }
@@ -250,6 +256,13 @@ struct ScorecardView: View {
         }
         appState.activeRoundID = roundID
         appState.setScore(player: cell.player, hole: cell.hole, strokes: strokes)
+        editingCell = nil
+    }
+
+    private func clearScore() {
+        guard let cell = editingCell else { return }
+        appState.activeRoundID = roundID
+        appState.setScore(player: cell.player, hole: cell.hole, strokes: 0)
         editingCell = nil
     }
 }
